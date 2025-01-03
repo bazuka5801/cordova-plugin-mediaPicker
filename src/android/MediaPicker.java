@@ -1,5 +1,4 @@
 package com.dmc.mediaPickerPlugin;
-
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -11,13 +10,17 @@ import android.provider.MediaStore;
 import android.util.Base64;
 import android.util.Log;
 
-import com.dmcbig.mediapicker.PickerActivity;
-import com.dmcbig.mediapicker.PickerConfig;
-import com.dmcbig.mediapicker.TakePhotoActivity;
-import com.dmcbig.mediapicker.entity.Media;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.PickVisualMediaRequest;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia;
+
+
 
 import org.apache.cordova.CallbackContext;
+import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.CordovaPlugin;
+import org.apache.cordova.CordovaWebView;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -27,9 +30,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 
 
 /**
@@ -41,82 +44,185 @@ public class MediaPicker extends CordovaPlugin {
     private  int quality=100;//default original
     private  int thumbnailW=200;
     private  int thumbnailH=200;
+    private ActivityResultLauncher<PickVisualMediaRequest> pickMedia;
+    private ActivityResultLauncher<PickVisualMediaRequest> pickMultipleMedia;
+
+    @Override
+    public void initialize(CordovaInterface cordova, CordovaWebView webView) {
+        if (pickMedia == null) {
+            pickMedia = cordova.getActivity().registerForActivityResult(
+                    new ActivityResultContracts.PickVisualMedia(),
+                    uri -> {
+                        // Handle the selected media URI (single selection)
+                        if (uri != null) {
+                            // Process the selected media
+                            handleSelectedMedia(uri, callback);
+                        } else {
+                            // User canceled or no media selected
+                            // Handle user cancellation
+                            callback.success(new JSONArray());
+                        }
+                    });
+        }
+
+        if (pickMultipleMedia == null) {
+            pickMultipleMedia = cordova.getActivity().registerForActivityResult(
+                    new PickMultipleVisualMedia(),
+                    uris -> {
+                        // Handle the list of selected media URIs (multiple selection)
+                        if (!uris.isEmpty()) {
+                            // Process the selected media
+                            handleSelectedMediaMultiple(uris, callback);
+                        } else {
+                            // User canceled or no media selected
+                            // Handle user cancellation
+                            callback.success(new JSONArray());
+                        }
+                    });
+        }
+        super.initialize(cordova, webView);
+    }
+
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
         getPublicArgs(args);
 
-        if (action.equals("getMedias")) {
-            this.getMedias(args, callbackContext);
-            return true;
-        }else if(action.equals("takePhoto")){
-            this.takePhoto(args, callbackContext);
-            return true;
-        }else if(action.equals("photoLibrary")){
-            this.getMedias(args, callbackContext);
-            return true;
-        }else if(action.equals("extractThumbnail")){
-            this.extractThumbnail(args, callbackContext);
-            return true;
-        }else if(action.equals("compressImage")){
-            this.compressImage(args, callbackContext);
-            return true;
-        }else if(action.equals("fileToBlob")){
-            this.fileToBlob(args.getString(0), callbackContext);
-            return true;
-        }else if(action.equals("getExifForKey")){
-            this.getExifForKey(args.getString(0),args.getString(1),callbackContext);
-            return true;
-        }else if(action.equals("getFileInfo")){
-            this.getFileInfo(args,callbackContext);
-            return true;
+
+        switch (action) {
+            case "getMedias":
+            case "photoLibrary":
+                this.getMedias(args, callbackContext);
+                return true;
+            case "takePhoto":
+                this.takePhoto(args, callbackContext);
+                return true;
+            case "extractThumbnail":
+                this.extractThumbnail(args, callbackContext);
+                return true;
+            case "compressImage":
+                this.compressImage(args, callbackContext);
+                return true;
+            case "fileToBlob":
+                this.fileToBlob(args.getString(0), callbackContext);
+                return true;
+            case "getExifForKey":
+                this.getExifForKey(args.getString(0), args.getString(1), callbackContext);
+                return true;
+            case "getFileInfo":
+                this.getFileInfo(args, callbackContext);
+                return true;
         }
         return false;
     }
 
     private void takePhoto(JSONArray args, CallbackContext callbackContext) {
         this.callback=callbackContext;
-        Intent intent =new Intent(cordova.getActivity(), TakePhotoActivity.class); //Take a photo with a camera
-        this.cordova.startActivityForResult(this,intent,200);
+//        Intent intent =new Intent(cordova.getActivity(), TakePhotoActivity.class); //Take a photo with a camera
+//        this.cordova.startActivityForResult(this,intent,200);
     }
 
-    private void getMedias(JSONArray args, CallbackContext callbackContext) {
-        this.callback=callbackContext;
-        Intent intent =new Intent(cordova.getActivity(), PickerActivity.class);
-        intent.putExtra(PickerConfig.MAX_SELECT_COUNT,10);  //default 40 (Optional)
-        JSONObject jsonObject=new JSONObject();
-        if (args != null && args.length() > 0) {
+    private void handleSelectedMedia(Uri uri, CallbackContext callbackContext) {
+        JSONArray jsonArray = new JSONArray();
+        JSONObject object = new JSONObject();
+        fillJsonObjectFromUri(uri, object); // Use helper function
+        jsonArray.put(object);
+        callbackContext.success(jsonArray);
+    }
+
+    private void handleSelectedMediaMultiple(List<Uri> uris, CallbackContext callbackContext) {
+        JSONArray jsonArray = new JSONArray();
+
+        for (int i = 0; i < uris.size(); i++) {
+            Uri uri = uris.get(i);
+            JSONObject object = new JSONObject();
+
             try {
-                jsonObject=args.getJSONObject(0);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            try {
-                intent.putExtra(PickerConfig.SELECT_MODE,jsonObject.getInt("selectMode"));//default image and video (Optional)
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            try {
-                intent.putExtra(PickerConfig.MAX_SELECT_SIZE,jsonObject.getLong("maxSelectSize")); //default 180MB (Optional)
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            try {
-                intent.putExtra(PickerConfig.MAX_SELECT_COUNT,jsonObject.getInt("maxSelectCount"));  //default 40 (Optional)
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            try {
-                ArrayList<Media> select= new ArrayList<Media>();
-                JSONArray jsonArray=jsonObject.getJSONArray("defaultSelectedList");
-                for(int i=0;i<jsonArray.length();i++){
-                    select.add(new Media(jsonArray.getString(i), "", 0, 0,0,0,""));
-                }
-                intent.putExtra(PickerConfig.DEFAULT_SELECTED_LIST,select); // (Optional)
-            } catch (Exception e) {
-                e.printStackTrace();
+                fillJsonObjectFromUri(uri, object);
+                object.put("index", i); // Add index for multiple items
+                jsonArray.put(object);
+            } catch (JSONException e) {
+                callbackContext.error("Error processing URI " + uri + ": " + e.getMessage());
+                return; // Stop processing if one URI fails
             }
         }
-        this.cordova.startActivityForResult(this,intent,200);
+
+        callbackContext.success(jsonArray);
+    }
+
+    private void fillJsonObjectFromUri(Uri uri, JSONObject object) {
+        String path = FileHelper.getRealPath(uri, cordova);
+        String name = uri.getLastPathSegment();
+
+        if (name != null && !name.contains(".")) {
+            name = name + "." +  FileHelper.getMimeType(cordova.getContext(), uri);
+        }
+        long size = 0;
+        String mediaType = "";
+
+        if (path != null) {
+            String mimeType = FileHelper.getMimeType(uri.toString(), cordova);
+            if (mimeType != null) {
+                mediaType = mimeType.startsWith("video") ? "video" : mimeType.startsWith("image") ? "image" : "";
+            }
+        }
+
+        try {
+            if (path != null) { // Check for null path before creating File object
+                File file = new File(path);
+                if (file.exists()) {
+                    size = file.length();
+                    uri = Uri.fromFile(file);
+                }
+            }
+        } catch (SecurityException e) {
+            // Log the exception for debugging purposes
+            Log.w("Media Plugin", "Security Exception getting file size: " + e.getMessage());
+        }
+
+        try {
+            object.put("path", path);
+            object.put("uri", uri.toString());
+            object.put("size", size);
+            object.put("name", name);
+            object.put("mediaType", mediaType);
+        } catch (JSONException e) {
+            // This should not happen since we're putting primitive types, but good practice to handle it
+            Log.e("Media Plugin", "JSONException in fillJsonObjectFromUri: " + e.getMessage());
+        }
+    }
+
+    private String getFileExtension(String path) {
+        if (path == null) return null;
+        int dotIndex = path.lastIndexOf('.');
+        if (dotIndex > 0 && dotIndex < path.length() - 1) {
+            return path.substring(dotIndex + 1).toLowerCase(); // Convert to lowercase for case-insensitive comparison
+        }
+        return null;
+    }
+
+    private void getMedias(JSONArray args, CallbackContext callbackContext) throws JSONException {
+//101=picker image and video , 100=image , 102=video
+        this.callback=callbackContext;
+
+        int selectMode = args.getJSONObject(0).getInt("selectMode");
+        switch (selectMode) {
+            case 101:
+                pickMedia.launch(new PickVisualMediaRequest.Builder()
+                        .setMediaType(ActivityResultContracts.PickVisualMedia.ImageAndVideo.INSTANCE)
+                        .build());
+                break;
+            case 100:
+                pickMedia.launch(new PickVisualMediaRequest.Builder()
+                        .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly.INSTANCE)
+                        .build());
+                break;
+
+            case 102:
+                pickMedia.launch(new PickVisualMediaRequest.Builder()
+                        .setMediaType(ActivityResultContracts.PickVisualMedia.VideoOnly.INSTANCE)
+                        .build());
+                break;
+        }
     }
 
     public  void getPublicArgs(JSONArray args){
@@ -151,40 +257,40 @@ public class MediaPicker extends CordovaPlugin {
     }
 
 
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent intent) {
-        super.onActivityResult(requestCode, resultCode, intent);
-        try {
-            if(requestCode==200&&resultCode==PickerConfig.RESULT_CODE){
-                final ArrayList<Media> select=intent.getParcelableArrayListExtra(PickerConfig.EXTRA_RESULT);
-                final JSONArray jsonArray=new JSONArray();
-
-                cordova.getThreadPool().execute(new Runnable() {
-                    public void run() {
-                        try {
-                            int index=0;
-                            for(Media media:select){
-                                JSONObject object=new JSONObject();
-                                object.put("path",media.path);
-                                object.put("uri",Uri.fromFile(new File(media.path)));//Uri.fromFile(file).toString() || [NSURL fileURLWithPath:filePath] absoluteString]
-                                object.put("size",media.size);
-                                object.put("name",media.name);
-                                object.put("index",index);
-                                object.put("mediaType",media.mediaType==3?"video":"image");
-                                jsonArray.put(object);
-                                index++;
-                            }
-                            MediaPicker.this.callback.success(jsonArray);
-                        } catch (JSONException e) {
-                            e.printStackTrace();
-                        }
-                    }
-                });
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
+//    @Override
+//    public void onActivityResult(int requestCode, int resultCode, Intent intent) {
+//        super.onActivityResult(requestCode, resultCode, intent);
+//        try {
+//            if(requestCode==200&&resultCode==PickerConfig.RESULT_CODE){
+//                final ArrayList<Media> select=intent.getParcelableArrayListExtra(PickerConfig.EXTRA_RESULT);
+//                final JSONArray jsonArray=new JSONArray();
+//
+//                cordova.getThreadPool().execute(new Runnable() {
+//                    public void run() {
+//                        try {
+//                            int index=0;
+//                            for(Media media:select){
+//                                JSONObject object=new JSONObject();
+//                                object.put("path",media.path);
+//                                object.put("uri",Uri.fromFile(new File(media.path)));//Uri.fromFile(file).toString() || [NSURL fileURLWithPath:filePath] absoluteString]
+//                                object.put("size",media.size);
+//                                object.put("name",media.name);
+//                                object.put("index",index);
+//                                object.put("mediaType",media.mediaType==3?"video":"image");
+//                                jsonArray.put(object);
+//                                index++;
+//                            }
+//                            MediaPicker.this.callback.success(jsonArray);
+//                        } catch (JSONException e) {
+//                            e.printStackTrace();
+//                        }
+//                    }
+//                });
+//            }
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        }
+//    }
 
     public  void extractThumbnail(JSONArray args, CallbackContext callbackContext){
         JSONObject jsonObject=new JSONObject();
@@ -383,3 +489,4 @@ public class MediaPicker extends CordovaPlugin {
         callbackContext.success(data);
     }
 }
+
