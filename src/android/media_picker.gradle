@@ -4,5 +4,5 @@ dependencies {
     implementation 'com.android.support:support-v4:25.3.1'
     annotationProcessor 'com.github.bumptech.glide:compiler:4.14.0'
     implementation 'com.github.chrisbanes.photoview:library:1.2.4'
-    implementation files("../capacitor-cordova-android-plugins/src/main/lib/mediapicker-3.4-sources.jar", "../capacitor-cordova-android-plugins/src/main/lib/mediapicker-debug.aar")
+    implementation files("../capacitor-cordova-android-plugins/src/main/lib/mediapicker-3.4-sources.jar")
 }

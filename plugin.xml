@@ -20,7 +20,6 @@
     <resource-file src="src/android/Library/res/values-de/multiimagechooser_strings_de.xml" target="res/values-de/multiimagechooser_strings_de.xml"/>
     <source-file src="src/android/MediaPicker.java" target-dir="lib" />
     <source-file src="src/android/mediapicker-3.4-sources.jar" target-dir="lib" />
-    <source-file src="src/android/mediapicker-debug.aar" target-dir="lib" />
     <framework src="src/android/media_picker.gradle" custom="true" type="gradleReference" />
   </platform>
 
