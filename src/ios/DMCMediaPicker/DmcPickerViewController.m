@@ -191,7 +191,7 @@
     
     //获取相册
     PHFetchResult *smartAlbums = [PHAssetCollection       fetchAssetCollectionsWithType:PHAssetCollectionTypeSmartAlbum
-                                                                                subtype:PHAssetCollectionSubtypeAlbumRegular options:nil];
+                                                                                subtype:PHAssetCollectionSubtypeAny options:nil];
     PHFetchResult *syncedAlbums = [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeAlbum
                                                                            subtype:PHAssetCollectionSubtypeAlbumSyncedAlbum options:nil];
     PHFetchResult *userCollections = [PHCollectionList fetchTopLevelUserCollectionsWithOptions:nil];
